@@ -25,22 +25,34 @@ class Command(BaseCommand):
             defaults={'description': 'Super administrator with full access'},
         )
 
-        user, created = User.objects.get_or_create(
-            email=admin_email,
-            defaults={
-                'username': 'admin',
-                'first_name': 'Admin',
-                'last_name': 'User',
-                'is_staff': True,
-                'is_superuser': True,
-            },
+        # Match on email first, then fall back to the 'admin' username so a
+        # changed ADMIN_EMAIL doesn't collide with the existing admin account.
+        user = (
+            User.objects.filter(email=admin_email).first()
+            or User.objects.filter(username='admin').first()
         )
+        created = user is None
 
         if created:
+            user = User(
+                email=admin_email,
+                username='admin',
+                first_name='Admin',
+                last_name='User',
+                is_staff=True,
+                is_superuser=True,
+            )
             user.set_password(admin_password)
 
+        changed = created
+        if user.email != admin_email:
+            user.email = admin_email
+            changed = True
         if user.role != admin_role:
             user.role = admin_role
+            changed = True
+
+        if changed:
             user.save()
             self.stdout.write(self.style.SUCCESS(
                 f'{"Created" if created else "Updated"} admin user {user.email} with SUPER_ADMIN role'
